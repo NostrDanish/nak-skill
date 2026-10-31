@@ -1,358 +1,110 @@
 ---
 name: nak
-description: Interact with Nostr protocol using the nak CLI tool. Use to generate Nostr secret keys, encode and decode Nostr identifiers (hex/npub/nsec/nip05/etc), fetch events from relays, sign and publish Nostr events, and more.
+description: "Use the nak CLI (Nostr Army Knife, verified against v0.21) to generate keys, encode or decode npub/nsec/note/nevent/naddr, fetch by nevent or NIP-05, query and count and sync relays, sign and publish events, gift-wrap, upload to Blossom, run a bunker, administer a relay, and use git-over-nostr. Triggers on nak, nostr CLI, nak req, nak event, nak fetch, encode npub. Not the NIP spec (nostr-nips) and not a library (nostr)."
 license: CC-BY-SA-4.0
 ---
 
-# nak - Nostr Army Knife
+# nak
 
-Work with the Nostr protocol using the `nak` CLI tool.
+`nak` is the Nostr CLI. Flag names below were checked against **v0.21.2**. Before you invent a flag, run `nak <command> --help`. If that flag is not listed, it does not exist.
 
-GitHub: https://github.com/fiatjaf/nak
+`nak --version` first. A much older binary will not match this skill.
 
-## Installation
+## Install
 
-To install (or upgrade) nak:
+Prefer a pinned install:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/fiatjaf/nak/master/install.sh | sh
+go install github.com/fiatjaf/nak@v0.21.2
 ```
 
-## Core Concepts
+Also fine: a release binary from https://github.com/fiatjaf/nak/releases, `brew install nak` on macOS. The upstream `curl | sh` installer tracks master; use it only when you mean to track master.
 
-Based on analyzing extensive real-world usage, here are the fundamental concepts distilled down, then branched out:
+## Secrets
 
----
+- A raw nsec or hex secret goes in the environment: `export NOSTR_SECRET_KEY=...` for that process only. nak reads it. Do not pass it as `--sec`. The process list and the shell history keep `--sec` arguments.
+- `bunker://` URLs and `ncryptsec1` strings are also secrets. Put those in `NOSTR_SECRET_KEY` too. ncryptsec prompts for the password.
+- Do not run `nak key default` in a chat or a log. It prints the machine's default secret.
+- `nak key generate` prints a new secret. Store it in a mode-0600 file outside any repo. Do not commit it, and do not paste it back into the chat.
+- Publishing with no relays prints the event and does not send it. That is the safe way to inspect a signed event.
 
-### CONCEPT 1: Query & Discovery
-*"Finding events and data on Nostr"*
+## Which command
 
-**Basic:**
-- Fetch by identifier: "Get event/profile without knowing relays"
-  - `nak fetch nevent1...` (uses embedded relay hints)
-  - `nak fetch alex@gleasonator.dev` (NIP-05 resolution)
-- Query by event ID: "I want THIS specific event from a relay"
-  - `nak req -i <event_id> <relay>`
-- Query by author: "Show me everything from this person"
-  - `nak req -a <pubkey> <relay>`
-- Query by kind: "Show me all profiles/notes/videos"
-  - `nak req -k <kind> <relay>`
+| Job | Command |
+|---|---|
+| Events from relays you name | `nak req` |
+| One event or profile from hints inside a nevent, naddr, nprofile, or NIP-05 | `nak fetch` |
+| How many | `nak count` (NIP-45; the relay must support it) |
+| Build, sign, and optionally publish | `nak event` |
+| Copy one event between relays | `nak req -i <id> <src> \| nak event <dst>...` |
+| Negentropy sync | `nak sync <source> <dest>` |
+| Decode / encode | `nak decode`, `nak encode` |
+| Keys | `nak key generate`, `nak key public`, `nak key encrypt`, `nak key decrypt` |
+| What is kind N | `nak kind <n>` |
+| One-line NIP summary | `nak nip <id>` |
+| Relay info doc | `nak relay <url>` |
+| Someone's read/write relays | `nak relays <pubkey-or-nip05>` |
+| Profile card | `nak profile <npub-or-nip05>` |
+| Gift wrap (NIP-59) | `nak gift wrap` / `nak gift unwrap` |
+| Blossom file | `nak blossom upload\|download\|list\|mirror\|check` |
+| Remote signer | `nak event` with `NOSTR_SECRET_KEY=bunker://...` |
+| Be a signer | `nak bunker` |
+| Relay admin (NIP-86) | `nak admin <method> <relay>` |
+| Git over Nostr (NIP-34) | `nak git` |
+| Check a signature | `nak verify` (event on stdin or as the argument) |
 
-**Intermediate:**
-- Fetch addressable events: "Get event by naddr/nprofile"
-  - `nak fetch naddr1...` (kind, author, identifier encoded)
-  - `nak fetch -r relay.primal.net naddr1...` (override relays)
-- Filter by multiple criteria: "Find posts by author X of kind Y"
-  - `nak req -k 1 -a <pubkey> <relay>`
-- Tag-based queries: "Find events tagged with bitcoin"
-  - `nak req --tag t=bitcoin <relay>`
+Outbox publish and read: `nak event --outbox` publishes to the author's write relays and to the read relays of `p`-tagged people. `nak req --outbox` reads from the authors' write relays. Both need network and are off unless you pass the flag.
 
-**Advanced:**
-- Search with ranking: "Find trending/top content"
-  - `nak req --search "sort:hot" <relay>`
-  - `nak req --search "popular:24h" <relay>`
-- Live monitoring: "Watch events in real-time"
-  - `nak req --stream <relay>`
-- Cross-protocol queries: "Find bridged Bluesky content"
-  - `nak req --tag "proxy=at://..." <relay>`
+## Recipes that are easy to get wrong
 
-**Use cases:** Discovering content, debugging relay data, testing search algorithms, monitoring live feeds
+Query:
 
----
-
-### CONCEPT 2: Broadcast & Migration
-*"Moving/copying events between relays"*
-
-**Basic:**
-- Publish a single event: "Put this on relay X"
-  - `cat event.json | nak event <relay>`
-- Query and republish: "Copy event from relay A to relay B"
-  - `nak req -i <id> relay1 | nak event relay2`
-
-**Intermediate:**
-- Batch migration: "Copy all events of kind X"
-  - `nak req -k 30717 source_relay | nak event dest_relay`
-- Paginated backup: "Download everything from a relay"
-  - `nak req --paginate source_relay | nak event backup_relay`
-- Multi-relay broadcast: "Publish to multiple relays at once"
-  - `cat event.json | nak event relay1 relay2 relay3`
-
-**Advanced:**
-- Selective migration: "Copy follow list members' data"
-  - Loop through follow list, query each author, republish to new relay
-- Filter and migrate: "Copy only tagged/searched content"
-  - `nak req --tag client=X relay1 | nak event relay2`
-- Cross-relay synchronization: "Keep two relays in sync"
-  - `nak sync source_relay dest_relay`
-
-**Use cases:** Seeding new relays, backing up data, migrating content between relays, bridging Mostr/Fediverse content
-
----
-
-### CONCEPT 3: Identity & Encoding
-*"Working with Nostr identifiers and keys"*
-
-**Basic:**
-- Decode identifiers: "What's inside this npub/nevent?"
-  - `nak decode npub1...`
-  - `nak decode user@domain.com`
-- Encode identifiers: "Turn this pubkey into npub"
-  - `nak encode npub <hex_pubkey>`
-
-**Intermediate:**
-- Generate keys: "Create a new identity"
-  - `nak key generate`
-  - `nak key generate | nak key public | nak encode npub`
-- Extract hex from NIP-05: "Get the raw pubkey from an address"
-  - `nak decode user@domain.com | jq -r .pubkey`
-- Create shareable references: "Make a nevent with relay hints"
-  - `nak encode nevent <event_id> --relay <relay>`
-
-**Advanced:**
-- Complex naddr creation: "Create addressable event reference with metadata"
-  - `nak encode naddr -k 30717 -a <author> -d <identifier> -r <relay>`
-- Multi-relay nprofile: "Create profile with multiple relay hints"
-  - `nak encode nprofile <pubkey> -r relay1 -r relay2 -r relay3`
-
-**Use cases:** Converting between formats, sharing references with relay hints, managing multiple identities, extracting pubkeys for scripting
-
----
-
-### CONCEPT 4: Event Creation & Publishing
-*"Creating and signing new events"*
-
-**Basic:**
-- Interactive creation: "Create an event with prompts"
-  - `nak event --prompt-sec <relay>`
-- Simple note: "Publish a text note"
-  - `nak event -k 1 -c "Hello Nostr" <relay>`
-
-**Intermediate:**
-- Events with tags: "Create tagged content"
-  - `nak event -k 1 -t t=bitcoin -t t=nostr <relay>`
-- Event deletion: "Delete a previous event"
-  - `nak event -k 5 -e <event_id> --prompt-sec <relay>`
-- Replaceable events: "Create/update a profile or app data"
-  - `nak event -k 10019 -t mint=<url> -t pubkey=<key> <relay>`
-
-**Advanced:**
-- Remote signing with bunker: "Sign without exposing keys"
-  - `nak event --connect "bunker://..." <relay>`
-- Batch event creation: "Generate many events via script"
-  - `for i in {1..100}; do nak event localhost:8000; done`
-- Complex events from JSON: "Craft specific event structure"
-  - Modify JSON, then `cat event.json | nak event <relay>`
-
-**Use cases:** Testing event creation, developing apps (kind 31990, 37515), wallet integration (kind 10019), moderation (kind 5), bunker/remote signing implementation
-
----
-
-### CONCEPT 5: Development & Testing
-*"Building on Nostr"*
-
-**Basic:**
-- Local relay testing: "Test against dev relay"
-  - `nak req localhost:8000`
-  - `nak event ws://127.0.0.1:7777`
-
-**Intermediate:**
-- Inspect JSON: "Examine event structure"
-  - `nak req -i <id> <relay> | jq .`
-- Test search: "Verify search functionality"
-  - `nak req --search "<query>" localhost:8000`
-- Admin operations: "Manage relay content"
-  - `nak admin --prompt-sec banevent --id <id> <relay>`
-
-**Advanced:**
-- Protocol bridging: "Query/test ATProto integration"
-  - `nak req --tag "proxy=at://..." eclipse.pub/relay`
-- Git over Nostr: "Use git with Nostr transport"
-  - `nak git clone nostr://...`
-  - `nak req -k 30617 git.shakespeare.diy`
-- Performance testing: "Measure query speed"
-  - `time nak req -k 0 -a <pubkey> <relay>`
-- Custom event kinds: "Test proprietary event types"
-  - `nak req -k 37515 -a <author> -d <id> ditto.pub/relay`
-
-**Use cases:** Relay development (Ditto), testing bridges (Mostr/Bluesky), developing video platforms, implementing Git-over-Nostr, testing search ranking algorithms, performance benchmarking
-
----
-
-### CONCEPT 6: Analytics & Monitoring
-*"Understanding Nostr data"*
-
-**Basic:**
-- Count results: "How many events match?"
-  - `nak req -k 1 <relay> | wc -l`
-  - `nak count -k 7 -e <event_id> <relay>`
-
-**Intermediate:**
-- Live monitoring: "Watch relay activity"
-  - `nak req --stream <relay>`
-  - `nak req -l 0 --stream relay1 relay2 relay3`
-- Client analytics: "What apps are posting?"
-  - `nak req --tag client=<app> <relay>`
-
-**Advanced:**
-- Event chain analysis: "Track engagement"
-  - `nak count -k 7 -e <event_id> <relay>` (reactions)
-  - `nak req -k 6 -k 7 -e <event_id> <relay>` (reposts + reactions)
-- Content ranking: "Find top/hot content"
-  - `nak req --search "sort:top" <relay>`
-- Cross-relay comparison: "Compare event availability"
-  - Query same event from multiple relays, compare results
-
-**Use cases:** Monitoring relay health, tracking client usage (Ditto, noStrudel, moStard), analyzing engagement, testing ranking algorithms
-
----
-
-## Summary: The 6 Core Mental Models
-
-1. **Query & Discovery**: "How do I find things?"
-2. **Broadcast & Migration**: "How do I move things?"
-3. **Identity & Encoding**: "How do I represent things?"
-4. **Event Creation**: "How do I make things?"
-5. **Development & Testing**: "How do I build things?"
-6. **Analytics & Monitoring**: "How do I measure things?"
-
----
-
-## Command Shapes and Edge-Cases
-
-Non-obvious patterns and edge cases for nak commands.
-
-### Signing Methods
-
-**Using environment variable:**
 ```bash
-export NOSTR_SECRET_KEY=<hex_key>
-nak event -c "hello"  # Automatically uses $NOSTR_SECRET_KEY
+nak req -k 1 -a <pubkey-hex> -l 20 wss://relay.example.com
+nak req --stream -k 1 wss://relay.example.com          # stays open after EOSE
+nak req -k 1 --limit 50000 --paginate wss://nos.lol    # walks until, past the relay's page cap
+nak fetch nevent1...                                   # uses hints inside the code
+nak fetch -r wss://relay.example.com naddr1...         # extra relay, hints still apply
 ```
 
-**Reading key from file:**
+`-l 0` is the default and means no limit. `--search` is a NIP-50 string passed through; the relay defines what it means (`sort:hot` is not a nak feature). `--auth` answers a NIP-42 challenge and retries.
+
+Build:
+
 ```bash
-nak event -c "hello" --sec $(cat /path/to/key.txt)
+nak event -k 1 -c "hello" wss://relay.example.com
+nak event -k 0 -c '{"name":"alice"}'                   # kind 0 content is JSON
+nak event -k 1 -t t=bitcoin -t t=nostr                 # repeated single-letter tags
+nak event -t custom="value1;value2;value3"            # one tag, many values, split on ';'
+nak event -c @content.txt                              # leading @ reads a file
+nak event -k 30023 -d my-slug                          # first -d is the addressable identifier
+nak event --ts 1700000000 -c "backdated"
+nak event --pow 16 -c "mined"
+echo '{"content":"from stdin"}' | nak event -c "ignored"   # stdin wins over the flags it replaces
 ```
 
-### Content from File
+No `--prompt-sec`. No `--connect`. A bunker signs when the secret **is** the bunker URL in `NOSTR_SECRET_KEY`.
 
-**Using @ prefix to read content from file:**
+Identity:
+
 ```bash
-echo "hello world" > content.txt
-nak event -c @content.txt
-```
-
-### Tag Syntax
-
-**Tag with multiple values (semicolon-separated):**
-```bash
-nak event -t custom="value1;value2;value3"
-# Creates: ["custom", "value1", "value2", "value3"]
-```
-
-### Filter Output Modes
-
-**Print bare filter (JSON only):**
-```bash
-nak req -k 1 -l 5 --bare
-# Output: {"kinds":[1],"limit":5}
-```
-
-**Filter from stdin can be modified with flags:**
-```bash
-echo '{"kinds": [1]}' | nak req -l 5 -k 3 --bare
-```
-
-**Unlimited stream:**
-```bash
-nak req -l 0 --stream wss://relay.example.com
-```
-
-### Relay Specification
-
-**Local relays and WebSocket schemes:**
-```bash
-nak req localhost:8000
-nak req ws://127.0.0.1:7777
-nak req relay.example.com  # Assumes wss:// if not specified
-```
-
-### Encoding
-
-**Encode from JSON stdin (auto-detects type):**
-```bash
+nak key generate | nak key public | nak encode npub    # public half only; the secret was on the pipe, do not log it
+nak decode npub1...
+nak decode name@domain.com                             # NIP-05
+nak encode nevent <event-id-hex> -r wss://relay.example.com
+nak encode naddr -k 30023 -a <author-hex> -d <identifier> -r wss://relay.example.com
 echo '{"pubkey":"<hex>","relays":["wss://relay.example.com"]}' | nak encode
 ```
 
-### Key Operations
+Admin and git:
 
-**Complete key generation pipeline:**
 ```bash
-nak key generate | tee secret.key | nak key public | nak encode npub
-# Saves private key to file AND prints the public npub
+nak admin banevent wss://relay.example.com --id <event-id>
+nak git clone 'nostr://...'
 ```
 
-### Verification
+`nak admin` methods are subcommands (`allowpubkey`, `banpubkey`, `banevent`, ...). The relay URL is the argument, not a flag.
 
-**Verify and pipe:**
-```bash
-nak event -c "test" --sec <key> | nak verify && echo "Valid"
-```
+## Local relay URL shapes
 
-### Fetch vs Req
-
-**nak fetch uses relay hints from identifiers:**
-```bash
-nak fetch nevent1...  # Uses relays encoded in nevent
-nak fetch naddr1...   # Uses relays encoded in naddr  
-nak fetch alex@gleasonator.dev  # Resolves NIP-05
-nak fetch -r relay.primal.net naddr1...  # Override relays
-```
-
-**nak req requires explicit relay specification:**
-```bash
-nak req -i <event_id> wss://relay.example.com
-```
-
-### Edge Cases
-
-**No relays specified (prints event without publishing):**
-```bash
-nak event -c "test" --sec <key>  # Just prints the event JSON
-```
-
-**Tag order matters for addressable events:**
-```bash
-# The first 'd' tag is the identifier
-nak event -k 30023 -d first -d second  # "first" is the identifier
-```
-
-**Timestamp override:**
-```bash
-nak event --ts 1700000000 -c "backdated" --sec <key>
-nak event --ts 0 -c "genesis" --sec <key>  # Event at Unix epoch
-```
-
-**Kind 0 (profile) requires JSON content:**
-```bash
-nak event -k 0 -c '{"name":"Alice","about":"Developer"}' --sec <key>
-```
-
-**POW (Proof of Work):**
-```bash
-nak event --pow 20 -c "mined event" --sec <key>
-# Will compute hash until difficulty target is met
-```
-
-**NIP-42 AUTH:**
-```bash
-nak req --auth -k 1 wss://relay.example.com
-nak event --auth -c "test" --sec <key> wss://relay.example.com
-# Automatically handles AUTH challenges
-```
-
-**Stdin takes precedence over flags:**
-```bash
-echo '{"content":"from stdin"}' | nak event -c "from flag" --sec <key>
-# Uses "from stdin" (stdin overrides flags)
-```
+`nak req localhost:8000`, `nak req ws://127.0.0.1:7777`, and `nak req relay.example.com` (no scheme means `wss://`). `nak serve` starts an in-memory relay for tests.
