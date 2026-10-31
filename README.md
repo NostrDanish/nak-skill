@@ -17,6 +17,8 @@ Plus command shapes and edge-cases: signing methods, `@file` content, multi-valu
 
 Upload `SKILL.md` as a `.skill` package to your agent's skill library, or clone this repo into your skills directory.
 
+Install the CLI with `go install github.com/fiatjaf/nak@latest` (pinned module, not `curl | sh`). Confirm with `nak version`.
+
 ## Source
 
 Extracted from the [nostr-skills](https://github.com/NostrDanish/nostr-skills-registry) collection.

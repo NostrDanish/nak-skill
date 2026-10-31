@@ -12,11 +12,23 @@ GitHub: https://github.com/fiatjaf/nak
 
 ## Installation
 
-To install (or upgrade) nak:
+Prefer a **pinned Go install** (review the module path; do not pipe unpinned `master` scripts):
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/fiatjaf/nak/master/install.sh | sh
+go install github.com/fiatjaf/nak@latest
+nak version   # confirm before using
 ```
+
+The upstream `install.sh` exists but is unpinned `master` — read it before running, or skip it.
+
+## Security
+
+- The nsec **is** the account. Prefer `NOSTR_SECRET_KEY` in the environment; never pass nsecs on a shared command line if you can avoid it (`ps` sees argv).
+- `chmod 600` key files. Do not commit them.
+- `nak key default` / an implicit default key will publish as **that** identity — check `nak key public` before a live publish.
+- Bunker URLs contain secrets. Treat `bunker://` like an nsec.
+
+Companion: `nostr` (offline toolkit) · `nostr-nips` (live spec). This skill is **CLI only**.
 
 ## Core Concepts
 
@@ -48,7 +60,7 @@ Based on analyzing extensive real-world usage, here are the fundamental concepts
   - `nak req --tag t=bitcoin <relay>`
 
 **Advanced:**
-- Search with ranking: "Find trending/top content"
+- Search (NIP-50 `search` field — **relay-specific**; `sort:hot` / `popular:24h` are nostr.band-style extensions, not portable):
   - `nak req --search "sort:hot" <relay>`
   - `nak req --search "popular:24h" <relay>`
 - Live monitoring: "Watch events in real-time"
@@ -122,8 +134,9 @@ Based on analyzing extensive real-world usage, here are the fundamental concepts
 *"Creating and signing new events"*
 
 **Basic:**
-- Interactive creation: "Create an event with prompts"
-  - `nak event --prompt-sec <relay>`
+- Interactive / env signing: "Create an event"
+  - `export NOSTR_SECRET_KEY=<hex_or_nsec>` then `nak event -k 1 -c "Hello Nostr" <relay>`
+  - or `nak event -k 1 -c "Hello Nostr" --sec <nsec_or_hex> <relay>`
 - Simple note: "Publish a text note"
   - `nak event -k 1 -c "Hello Nostr" <relay>`
 
@@ -131,13 +144,14 @@ Based on analyzing extensive real-world usage, here are the fundamental concepts
 - Events with tags: "Create tagged content"
   - `nak event -k 1 -t t=bitcoin -t t=nostr <relay>`
 - Event deletion: "Delete a previous event"
-  - `nak event -k 5 -e <event_id> --prompt-sec <relay>`
+  - `nak event -k 5 -e <event_id> --sec "$NOSTR_SECRET_KEY" <relay>`
 - Replaceable events: "Create/update a profile or app data"
   - `nak event -k 10019 -t mint=<url> -t pubkey=<key> <relay>`
 
 **Advanced:**
-- Remote signing with bunker: "Sign without exposing keys"
-  - `nak event --connect "bunker://..." <relay>`
+- Remote signing with bunker: "Sign without exposing the nsec on this machine"
+  - `nak event -c "hello" --sec 'bunker://...' <relay>`
+  - Run `nak bunker` as the signer daemon when you need an interactive bunker, not `--connect` (that flag is not on `nak event`)
 - Batch event creation: "Generate many events via script"
   - `for i in {1..100}; do nak event localhost:8000; done`
 - Complex events from JSON: "Craft specific event structure"
@@ -161,7 +175,7 @@ Based on analyzing extensive real-world usage, here are the fundamental concepts
 - Test search: "Verify search functionality"
   - `nak req --search "<query>" localhost:8000`
 - Admin operations: "Manage relay content"
-  - `nak admin --prompt-sec banevent --id <id> <relay>`
+  - `nak admin banevent <relay> --id <id> --reason "spam" --sec "$NOSTR_SECRET_KEY"`
 
 **Advanced:**
 - Protocol bridging: "Query/test ATProto integration"
@@ -197,14 +211,27 @@ Based on analyzing extensive real-world usage, here are the fundamental concepts
 - Event chain analysis: "Track engagement"
   - `nak count -k 7 -e <event_id> <relay>` (reactions)
   - `nak req -k 6 -k 7 -e <event_id> <relay>` (reposts + reactions)
-- Content ranking: "Find top/hot content"
-  - `nak req --search "sort:top" <relay>`
+- Content ranking: "Find top/hot content on relays that implement extra search operators"
+  - `nak req --search "sort:top" <relay>`  # not core NIP-50
 - Cross-relay comparison: "Compare event availability"
   - Query same event from multiple relays, compare results
 
 **Use cases:** Monitoring relay health, tracking client usage (Ditto, noStrudel, moStard), analyzing engagement, testing ranking algorithms
 
 ---
+
+## Other commands worth knowing
+
+These exist on current `nak` and are easy to miss if you only read the six models:
+
+- `nak gift` — NIP-17 gift-wrap helpers
+- `nak blossom` — Blossom media (NIP-B7); NIP-96 is dead
+- `nak outbox` / `nak relays` — NIP-65 write/read relay selection
+- `nak serve` — local test relay
+- `nak nip <n>` — short NIP summary (then read the live spec via `nostr-nips`)
+- `nak sync` — Negentropy / relay sync (see also Concept 2)
+
+Git-over-Nostr (`nak git …`) is large enough that you should read NIP-34 via `nostr-nips` before using it as a transport.
 
 ## Summary: The 6 Core Mental Models
 
