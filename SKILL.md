@@ -1,6 +1,6 @@
 ---
 name: nak
-description: Interact with Nostr protocol using the nak CLI tool. Use to generate Nostr secret keys, encode and decode Nostr identifiers (hex/npub/nsec/nip05/etc), fetch events from relays, sign and publish Nostr events, and more.
+description: "Drive the nak CLI (github.com/fiatjaf/nak) for Nostr relays, keys, bech32, publish, fetch, outbox, blossom, gift wrap, NIP-86 admin, and git-over-Nostr. Use when the user says nak, or wants a shell one-liner instead of a library. Triggers on nak req, nak event, nak fetch, nevent, npub."
 license: CC-BY-SA-4.0
 ---
 
@@ -10,13 +10,46 @@ Work with the Nostr protocol using the `nak` CLI tool.
 
 GitHub: https://github.com/fiatjaf/nak
 
+## Read this first
+
+1. **No key means the public default key `01`.** `nak event` with neither `--sec` nor `NOSTR_SECRET_KEY` signs as pubkey `79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798`. That key is not yours. Set `NOSTR_SECRET_KEY` (hex, `nsec`, or `ncryptsec`) in the environment. `--sec` on the command line shows up in the process list. `--prompt-sec` is for a human at a terminal, not for an agent.
+2. **Do not publish, delete, ban, or spend unless the user asked for that exact action.** `nak admin`, `nak event` with a relay, `nak gift wrap`, and `nak blossom` upload are writes.
+3. **`sort:hot`, `popular:24h`, and `sort:top` are search-relay query strings, not nak features.** They do nothing on a relay that does not implement that syntax.
+4. **`ids` / `authors` / `#e` / `#p` are 64-character hex.** nak will not fix a prefix for you.
+5. When the command is about protocol rules rather than the CLI, use the `nostr` skill. When it is "what does this NIP say today", use `nostr-nips`.
+
+## Which command
+
+| Job | Command |
+|---|---|
+| Find events when you already know the relay | `nak req` |
+| Find an event from an nevent, naddr, nprofile, or nip05 | `nak fetch` (uses hints; `-r` overrides) |
+| Count | `nak count` |
+| Build or publish a note | `nak event` (no relay argument = print only, do not publish) |
+| Publish plain text with mentions and the author's write relays | `nak publish` |
+| Encode / decode bech32 | `nak encode` / `nak decode` |
+| Keys, including NIP-49 | `nak key generate`, `nak key public`, `nak key encrypt` |
+| Check an event | `nak verify` |
+| Copy between relays | `nak sync` (negentropy) or `nak req ... \| nak event <dest>` |
+| Outbox / relay list | `nak outbox` |
+| Blossom file | `nak blossom --server <host> upload <file>` — see the `blossom` skill for the protocol |
+| Gift wrap | `nak gift wrap` / `nak gift unwrap` |
+| Relay moderation (NIP-86) | `nak admin <method> <relay>`. Example: `nak admin banevent wss://relay.example --id <64-hex> --reason "spam"` |
+| Git over Nostr | `nak git` (remotes come from `nip34.json`, not `git remote`) |
+| Local relay | `nak serve` |
+
+Confirm flags with `nak <command> --help` when a flag below is older than the binary you have. Upstream moves.
+
 ## Installation
 
-To install (or upgrade) nak:
+Prefer a Go install you can pin:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/fiatjaf/nak/master/install.sh | sh
+go install github.com/fiatjaf/nak@latest
+nak --version
 ```
+
+The upstream shell installer is `curl -sSL https://raw.githubusercontent.com/fiatjaf/nak/master/install.sh | sh`. Read it before running it. Do not pipe it to a shell on a machine that holds keys unless you have already reviewed that file.
 
 ## Core Concepts
 
@@ -160,8 +193,9 @@ Based on analyzing extensive real-world usage, here are the fundamental concepts
   - `nak req -i <id> <relay> | jq .`
 - Test search: "Verify search functionality"
   - `nak req --search "<query>" localhost:8000`
-- Admin operations: "Manage relay content"
-  - `nak admin --prompt-sec banevent --id <id> <relay>`
+- Admin operations: "Manage relay content" (NIP-86; you must be that relay's admin)
+  - `nak admin banevent wss://relay.example --id <64-hex-id> --reason "spam"`
+  - `nak admin banpubkey wss://relay.example --pubkey <64-hex> --reason "spam"`
 
 **Advanced:**
 - Protocol bridging: "Query/test ATProto integration"
@@ -223,16 +257,15 @@ Non-obvious patterns and edge cases for nak commands.
 
 ### Signing Methods
 
-**Using environment variable:**
+**Using the environment (do this):**
 ```bash
-export NOSTR_SECRET_KEY=<hex_key>
-nak event -c "hello"  # Automatically uses $NOSTR_SECRET_KEY
+export NOSTR_SECRET_KEY=<hex-or-nsec-or-ncryptsec>
+nak event -c "hello"   # signs, prints JSON, publishes only if a relay is given
 ```
 
-**Reading key from file:**
-```bash
-nak event -c "hello" --sec $(cat /path/to/key.txt)
-```
+If `NOSTR_SECRET_KEY` is unset and you do not pass `--sec`, nak uses the default key `01` and the event is not yours.
+
+Do not use `--sec $(cat keyfile)` or `--sec nsec1...`. Both put the secret in the process list. `--prompt-sec` is interactive and will hang an agent.
 
 ### Content from File
 

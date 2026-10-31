@@ -13,6 +13,8 @@ Covers the 6 core mental models of working with Nostr via nak:
 
 Plus command shapes and edge-cases: signing methods, `@file` content, multi-value tags, bare filters, POW, NIP-42 AUTH, timestamp overrides.
 
+If `NOSTR_SECRET_KEY` is unset and you do not pass a key, nak signs as the public default key `01`. That key is not yours. NIP-86 admin is `nak admin <method> <relay>`, not a flag in front of the method name.
+
 ## Install
 
 Upload `SKILL.md` as a `.skill` package to your agent's skill library, or clone this repo into your skills directory.
