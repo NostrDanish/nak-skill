@@ -1,6 +1,6 @@
 ---
 name: nak
-description: Use the NAK CLI for read-only Nostr discovery, public identifier encoding/decoding, relay queries, inspection, validation and preparation of unsigned event drafts. Do not generate, reveal or handle raw private keys or let an agent sign with NAK's default key.
+description: Use the NAK CLI for read-only Nostr discovery, public identifier encoding/decoding, relay queries, inspection and validation. Agent workflows must not invoke NAK key-management or event-construction/publishing commands because the pinned release initializes a default signer even for no-sign event handling.
 license: CC-BY-SA-4.0
 ---
 
@@ -8,7 +8,7 @@ license: CC-BY-SA-4.0
 
 ## Scope and activation
 
-Use this skill when the user asks for NAK CLI commands, relay inspection, public identifier encoding/decoding, event queries, event validation, unsigned event preparation or controlled relay migration planning.
+Use this skill when the user asks for NAK CLI commands, relay inspection, public identifier encoding/decoding, event queries, event validation or read-only relay migration planning.
 
 Do not use it as the authoritative source for Nostr protocol rules. Verify protocol semantics against the canonical NIPs repository or the companion nostr / nostr-nips skills.
 
@@ -27,13 +27,13 @@ Do not pipe a mutable branch installer into a shell. Record the installed binary
 
 ## Critical signing boundary
 
-NAK can sign events. Its implementation can fall back to a machine default key when a signing command is run without an explicitly selected signer. This is unsuitable for agent workflows.
+NAK can sign events and the pinned v0.22.3 release initializes a signer before processing `nak event` input. The root `--sec` flag defaults to a machine-specific key; `event.go` gathers that keyer before checking `--no-sign`. Therefore, even `nak event --no-sign` and publishing an already-signed JSON event through `nak event` load the default private key into the agent process. This is unnecessary key exposure and is prohibited in agent workflows. Re-check this behavior if the version baseline changes.
 
-- The agent must never run a signing-capable NAK command that can select the machine default key.
-- Every event draft created by an agent must include the explicit no-sign option and a public author key.
+- The agent must not invoke `nak event` at all—not even with `--no-sign`, `--author`, or an already-signed event piped on stdin. The command initializes the default signer before taking those branches.
+- The agent must not run `nak key`, NAK encryption/decryption, signer, bunker or event-publishing commands. Limit NAK usage to the read-only commands in this skill.
 - Never put nsec, hex private keys, ncryptsec passwords, bunker secrets or signer credentials into command arguments, environment variables, shell history, agent context or logs.
 - Do not run key-generation, default-key, key-decryption or private-key-export commands from an agent.
-- Use a trusted wallet UI, NIP-07, NIP-46, OS keychain, KMS/HSM or isolated signer. The agent may prepare an unsigned event; the signer returns the signed event without revealing its secret.
+- When event creation or publishing is requested, prepare the proposed event as plain JSON in a separate, keyless workflow, then hand it to a trusted wallet UI, NIP-07, NIP-46, OS keychain, KMS/HSM or isolated signer. The agent must not pass it through NAK's event command.
 - Do not ask an agent to use an interactive prompt to enter a secret. Interactive key entry belongs in a trusted, human-controlled signer UI outside the agent.
 - Publishing, deletion, admin moderation, relay migration/sync, profile/list changes, wallet/payment actions and batch operations require explicit approval for the exact target and scope.
 - Never rely on NAK's default key for a user identity, service identity or test identity.
@@ -74,30 +74,11 @@ nak encode nprofile <public-key-hex> --relay <relay>
 
 Do not decode, print, convert or otherwise expose an nsec. A public-key conversion is safe; a private-key operation is not.
 
-### 3. Prepare an unsigned event draft
+### 3. Event creation and publishing are outside the agent's NAK workflow
 
-Always disable signing and specify the intended public author key:
+Do not call `nak event`, even with `--no-sign`. In the pinned v0.22.3 source, the command gathers the configured signer before it checks `--no-sign`; the root `--sec` flag defaults to a machine-specific key. This also applies when piping an already-signed event to `nak event`.
 
-~~~bash
-nak event --no-sign --author <public-key-hex> -k 1 -c "Hello Nostr"
-nak event --no-sign --author <public-key-hex> -k 1 -t t=bitcoin -t t=nostr -c "Example note"
-~~~
-
-These commands create unsigned drafts only. Do not add a relay argument to the draft command. Inspect the complete event content, tags and author before sending it to the trusted signer. The signer must show the exact event and destination relays before the user approves.
-
-A deletion request or replaceable-event update must also be prepared with signing disabled. It is a consequential operation; do not publish without approval of the exact event and target relays.
-
-### 4. Publish an already-signed event
-
-Only after a trusted signer has returned a complete signed event and the user approved the exact destination relays:
-
-~~~bash
-cat signed-event.json | nak event wss://relay.example.com
-~~~
-
-This passes an already-signed event to NAK for publishing. Do not alter the event during the publish step; changing content or tags requires a new signature. A relay OK acknowledgement proves only that the particular relay accepted the event, not global replication.
-
-For multiple relays, list every intended destination explicitly and obtain approval for the entire destination set before publishing.
+When the user requests an event, prepare a plain unsigned JSON object without invoking NAK. Validate its NIP-01 fields and exact content/tags using a separately maintained, keyless validation path. Transfer it to a trusted wallet or isolated signer for review and signature. Publish only through a separate relay transport that does not initialize or receive an agent-held signer, and only after approval of the exact event and destination relays.
 
 ### 5. Relay migration and backups
 
@@ -127,8 +108,9 @@ nak req -i <event-id> wss://relay.example.com | jq .
 nak req -k 0 -a <public-key-hex> wss://relay.example.com
 nak count -k 7 -e <event-id> wss://relay.example.com
 nak req --search "nostr" wss://relay.example.com
-nak req -k 1 ws://127.0.0.1:7777
 ~~~
+
+Do not use NAK's authenticated relay options in an agent session; they may require a signer. Local relay testing must also use an explicitly approved local target and must not enable authentication.
 
 Relay support for search operators varies. Check the relay's NIP-11 document; do not assume a search expression has portable semantics.
 
@@ -145,7 +127,7 @@ The following are not ordinary read-only CLI tasks:
 - proof-of-work workloads or large batch publishing;
 - payment or wallet-related operations.
 
-The agent may prepare an unsigned draft and explain the command. It must stop before the external side effect unless the user approved the exact action, event/payload, destination and scope. Approval for discovery or inspection does not authorize publishing, payment or deletion.
+The agent may prepare a keyless JSON proposal outside NAK and explain the required human signer workflow. It must stop before any external side effect unless the user approved the exact action, event/payload, destination and scope. Approval for discovery or inspection does not authorize publishing, payment or deletion.
 
 ## Failure handling
 
