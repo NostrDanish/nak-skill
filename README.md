@@ -15,7 +15,7 @@ Plus command shapes and edge-cases: signing methods, `@file` content, multi-valu
 
 ## Install
 
-Upload `SKILL.md` as a `.skill` package to your agent's skill library, or clone this repo into your skills directory.
+Upload `SKILL.md` as a `.skill` package to your agent's skill library, or clone this repo into a folder named `nak` inside your skills root so the folder matches the skill name: `git clone https://github.com/NostrDanish/nak-skill <skills-root>/nak`.
 
 ## Source
 
