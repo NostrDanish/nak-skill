@@ -16,7 +16,12 @@ class NAKSkillSafetyTests(unittest.TestCase):
 
     def test_event_examples_never_fall_back_to_machine_default_key(self):
         code_spans = re.findall(r"`([^`]+)`", self.text)
-        commands = [snippet for snippet in code_spans if "nak event" in snippet]
+        fenced_blocks = re.findall(r"(?ms)^~~~[^\n]*\n(.*?)^~~~\s*$", self.text)
+        fenced_commands = [
+            line.strip() for block in fenced_blocks for line in block.splitlines()
+            if "nak event" in line
+        ]
+        commands = [snippet for snippet in code_spans if "nak event" in snippet] + fenced_commands
         self.assertTrue(commands, "expected explicit safe event workflow examples")
         for command in commands:
             safe = (
