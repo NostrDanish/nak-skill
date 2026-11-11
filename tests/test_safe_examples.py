@@ -14,23 +14,11 @@ class NAKSkillSafetyTests(unittest.TestCase):
             with self.subTest(token=token):
                 self.assertNotIn(token, self.text)
 
-    def test_event_examples_never_fall_back_to_machine_default_key(self):
-        code_spans = re.findall(r"`([^`]+)`", self.text)
-        fenced_blocks = re.findall(r"(?ms)^~~~[^\n]*\n(.*?)^~~~\s*$", self.text)
-        fenced_commands = [
-            line.strip() for block in fenced_blocks for line in block.splitlines()
-            if "nak event" in line
-        ]
-        commands = [snippet for snippet in code_spans if "nak event" in snippet] + fenced_commands
-        self.assertTrue(commands, "expected explicit safe event workflow examples")
-        for command in commands:
-            safe = (
-                command.startswith("nak event --help")
-                or command.startswith("nak event --no-sign --author")
-                or "cat signed-event.json | nak event " in command
-            )
-            with self.subTest(command=command):
-                self.assertTrue(safe, "NAK event example must be unsigned draft, help, or pre-signed input")
+    def test_agent_skill_never_invokes_nak_event(self):
+        # v0.22.3 initializes the default signer before checking --no-sign.
+        self.assertNotIn("nak event", self.text)
+        self.assertIn("must not invoke", self.text)
+        self.assertIn("machine-specific key", self.text)
 
     def test_no_agent_key_generation_or_default_key_commands(self):
         for phrase in ("nak key generate", "nak key default", "nak key decrypt"):
