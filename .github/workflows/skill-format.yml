@@ -1,0 +1,35 @@
+name: Agent Skill format
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.11"
+      - name: Install upstream Agent Skills validator
+        run: python -m pip install "git+https://github.com/agentskills/agentskills.git@83021e2be457a9b6679148719c1f6074f0ad975e#subdirectory=skills-ref"
+      - name: Test safe NAK command examples
+        run: python -m unittest discover -s tests -v
+      - name: Validate packaged skill
+        env:
+          SKILL_NAME: "nak"
+        run: |
+          mkdir -p "$RUNNER_TEMP/skill-root/$SKILL_NAME"
+          cp SKILL.md "$RUNNER_TEMP/skill-root/$SKILL_NAME/SKILL.md"
+          for dir in references scripts assets; do
+            if [ -d "$dir" ]; then cp -R "$dir" "$RUNNER_TEMP/skill-root/$SKILL_NAME/$dir"; fi
+          done
+          skills-ref validate "$RUNNER_TEMP/skill-root/$SKILL_NAME"
