@@ -20,7 +20,6 @@ This skill's command reference is pinned to NAK v0.22.3, published 2026-11-07. T
 go install github.com/fiatjaf/nak@v0.22.3
 nak --help
 nak req --help
-nak event --help
 ~~~
 
 Do not pipe a mutable branch installer into a shell. Record the installed binary version and checksum in deployment metadata.
