@@ -142,3 +142,9 @@ The agent may prepare a keyless JSON proposal outside NAK and explain the requir
 NAK: https://github.com/fiatjaf/nak  
 Version baseline: v0.22.3  
 License: CC-BY-SA-4.0
+
+## Project knowledge and operation handover integration
+
+For an owner's ongoing Nostr infrastructure or application work, check the configured Second Brain / Workbench before planning relay inspections, migrations or operational changes. Read the project task and latest handover, search for prior relay inventories and backup/migration decisions, and verify exact source/destination scope. This is a coordination aid only; the NAK safety restrictions in this skill remain controlling.
+
+Record read-only findings with repository/service links, NAK version, commands run, relay targets, dates and explicit completeness/uncertainty. For migrations or backups, update the handover with the source, destination, scope, backup evidence, dry-run/test outcome, approval boundary and next action. Never store keys, credentials, invoice data or private user events in Notion. No workspace access means no claim that a Notion update was completed.
